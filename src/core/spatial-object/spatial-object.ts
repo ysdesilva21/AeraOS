@@ -65,7 +65,7 @@ export interface SpatialProperties {
 
 export interface SpatialObjectSettings {
     iconOverride?: string;
-    openWidth? : "system-default" | "browser" | "aeraos";
+    openWith? : "system-default" | "browser" | "aeraos";
 }
 
 /*Lifecycle /trash - null means the object is in trash*/
