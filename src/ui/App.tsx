@@ -1,122 +1,154 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+
+import { useState } from "react";
+import type { SpatialObject } from "../core/spatial-object/spatial-object";
+import "./App.css";
+
+const TEST_WORKSPACE_ID = "workspace-test";
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [status, setStatus] = useState("Ready to test AeraOS storage.");
+  const [objects, setObjects] = useState<SpatialObject[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  async function runAction(action: () => Promise<void>) {
+    setBusy(true);
+    try {
+      await action();
+    } catch (error) {
+      setStatus(
+        error instanceof Error ? error.message : "An unknown error occurred.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function refreshObjects() {
+    const result = await window.aeraos.listSpatialObjects(
+      TEST_WORKSPACE_ID,
+    );
+    setObjects(result);
+  }
+
+  async function createObject() {
+    const created = await window.aeraos.createSpatialObject({
+      workspaceId: TEST_WORKSPACE_ID,
+      title: `Runtime Test ${new Date().toLocaleTimeString()}`,
+      resource: {
+        type: "url",
+        url: "https://example.com",
+      },
+    });
+
+    await refreshObjects();
+    setStatus(`Created object: ${created.title}`);
+  }
+
+  async function updateObject(object: SpatialObject) {
+    const updated = await window.aeraos.updateSpatialObject(
+      TEST_WORKSPACE_ID,
+      object.id,
+      { title: `${object.title} (updated)` },
+    );
+
+    await refreshObjects();
+    setStatus(`Updated object: ${updated.title}`);
+  }
+
+  async function trashObject(object: SpatialObject) {
+    await window.aeraos.trashSpatialObject(
+      TEST_WORKSPACE_ID,
+      object.id,
+    );
+
+    await refreshObjects();
+    setStatus(`Moved "${object.title}" to trash.`);
+  }
+
+  async function restoreObject(object: SpatialObject) {
+    await window.aeraos.restoreSpatialObject(
+      TEST_WORKSPACE_ID,
+      object.id,
+    );
+
+    await refreshObjects();
+    setStatus(`Restored "${object.title}".`);
+  }
+
+  async function loadActive() {
+    const result = await window.aeraos.listActiveSpatialObjects(
+      TEST_WORKSPACE_ID,
+    );
+    setObjects(result);
+    setStatus(`Loaded ${result.length} active object(s).`);
+  }
+
+  async function loadTrash() {
+    const result = await window.aeraos.listTrashSpatialObjects(
+      TEST_WORKSPACE_ID,
+    );
+    setObjects(result);
+    setStatus(`Loaded ${result.length} trashed object(s).`);
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started hj</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
+    <main style={{ padding: 32, fontFamily: "sans-serif" }}>
+      <h1>AeraOS — Storage Runtime Test</h1>
+      <p>{status}</p>
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        <button disabled={busy} onClick={() => void runAction(createObject)}>
+          Create object
         </button>
-      </section>
+        <button disabled={busy} onClick={() => void runAction(refreshObjects)}>
+          List all
+        </button>
+        <button disabled={busy} onClick={() => void runAction(loadActive)}>
+          List active
+        </button>
+        <button disabled={busy} onClick={() => void runAction(loadTrash)}>
+          List trash
+        </button>
+      </div>
 
-      <div className="ticks"></div>
+      <hr />
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
+      {objects.length === 0 ? (
+        <p>No objects in this list.</p>
+      ) : (
+        <ul>
+          {objects.map((object) => (
+            <li key={object.id} style={{ marginBottom: 16 }}>
+              <strong>{object.title}</strong>
+              <div>
+                <small>ID: {object.id}</small>
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                <button
+                  disabled={busy}
+                  onClick={() => void runAction(() => updateObject(object))}
                 >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
+                  Update title
+                </button>
+                <button
+                  disabled={busy}
+                  onClick={() => void runAction(() => trashObject(object))}
                 >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
+                  Trash
+                </button>
+                <button
+                  disabled={busy}
+                  onClick={() => void runAction(() => restoreObject(object))}
                 >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
+                  Restore
+                </button>
+              </div>
             </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+          ))}
+        </ul>
+      )}
+    </main>
+  );
 }
 
-export default App
+export default App;
