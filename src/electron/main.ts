@@ -4,16 +4,22 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDev } from "./util.js";
 
-import { InMemorySpatialObjectRepository } from "../core/spatial-object/spatial-object-repository.js";
+import { SqliteSpatialObjectRepository } from "../core/spatial-object/sqlite-spatial-object-repository.js";
 import { SpatialObjectService } from "../core/spatial-object/spatial-object-service.js";
 import { assertValidResourceReference } from "../core/spatial-object/spatial-object-validation.js";
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 
-const spatialObjectRepository = new InMemorySpatialObjectRepository();
-const spatialObjectService = new SpatialObjectService(
-  spatialObjectRepository,
-);
+let spatialObjectRepository: SqliteSpatialObjectRepository | null = null;
+let spatialObjectService: SpatialObjectService | null = null;
+
+function getSpatialObjectService(): SpatialObjectService {
+  if (!spatialObjectService) {
+    throw new Error("Spatial object storage is not initialized.");
+  }
+
+  return spatialObjectService;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -30,7 +36,7 @@ ipcMain.handle(
       throw new Error("Workspace ID must be a string.");
     }
 
-    return spatialObjectService.listByWorkspace(workspaceId);
+    return getSpatialObjectService().listByWorkspace(workspaceId);
   },
 );
 
@@ -57,7 +63,7 @@ ipcMain.handle(
 
     assertValidResourceReference(input.resource);
 
-    return spatialObjectService.create({
+    return getSpatialObjectService().create({
       workspaceId: input.workspaceId,
       title: input.title,
       resource: input.resource,
@@ -85,6 +91,11 @@ function createMainWindow(): void {
 }
 
 app.whenReady().then(() => {
+  const databasePath = path.join(app.getPath("userData"), "aeraos.db");
+
+  spatialObjectRepository = new SqliteSpatialObjectRepository(databasePath);
+  spatialObjectService = new SpatialObjectService(spatialObjectRepository);
+
   createMainWindow();
 
   app.on("activate", () => {
@@ -92,6 +103,12 @@ app.whenReady().then(() => {
       createMainWindow();
     }
   });
+});
+
+app.on("before-quit", () => {
+  spatialObjectRepository?.close();
+  spatialObjectRepository = null;
+  spatialObjectService = null;
 });
 
 app.on("window-all-closed", () => {
